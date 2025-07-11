@@ -26,6 +26,39 @@ import (
 	"github.com/NarthurN/habbr/internal/service"
 )
 
+// main является точкой входа в приложение Habbr GraphQL API.
+//
+// Функция выполняет полную инициализацию приложения в следующем порядке:
+// 1. Загружает конфигурацию из переменных окружения
+// 2. Настраивает систему логирования
+// 3. Инициализирует репозитории (PostgreSQL или in-memory)
+// 4. Создает сервисы бизнес-логики
+// 5. Настраивает GraphQL сервер с резолверами
+// 6. Запускает HTTP сервер
+// 7. Ожидает сигналы завершения для graceful shutdown
+//
+// Приложение поддерживает корректное завершение работы при получении
+// сигналов SIGINT или SIGTERM, завершая активные запросы и освобождая ресурсы.
+//
+// Примеры переменных окружения для запуска:
+//
+//	export SERVER_PORT=8080
+//	export DATABASE_TYPE=memory
+//	export LOGGER_LEVEL=info
+//	go run cmd/server/main.go
+//
+// Или для продакшена с PostgreSQL:
+//
+//	export SERVER_HOST=0.0.0.0
+//	export SERVER_PORT=8080
+//	export DATABASE_TYPE=postgres
+//	export DATABASE_HOST=localhost
+//	export DATABASE_NAME=habbr
+//	export DATABASE_USER=habbr_user
+//	export DATABASE_PASSWORD=secret
+//	export LOGGER_LEVEL=warn
+//	export LOGGER_FORMAT=json
+//	./habbr-server
 func main() {
 	// Загрузка конфигурации
 	cfg, err := config.Load()
@@ -85,7 +118,43 @@ func main() {
 	waitForShutdown(logger, httpServer, cfg.Server.ShutdownTimeout)
 }
 
-// setupLogger настраивает логгер на основе конфигурации
+// setupLogger настраивает и создает экземпляр логгера на основе конфигурации.
+//
+// Функция создает структурированный логгер используя библиотеку zap.
+// Поддерживает два формата вывода:
+// - "json": структурированный JSON формат для продакшена
+// - "console": человекочитаемый формат для разработки
+//
+// Поддерживает четыре уровня логирования:
+// - "debug": максимально подробные логи (включая отладочную информацию)
+// - "info": информационные сообщения (по умолчанию)
+// - "warn": предупреждения о потенциальных проблемах
+// - "error": только критические ошибки
+//
+// Параметры:
+//   - cfg: конфигурация логгера с настройками формата, уровня и опций
+//
+// Возвращает:
+//   - *zap.Logger: настроенный экземпляр логгера
+//   - error: ошибка создания логгера
+//
+// Особенности:
+//   - Caller information (файл:строка) включается в зависимости от cfg.EnableCaller
+//   - Логгер оптимизирован для высокой производительности
+//   - Поддерживает структурированные поля для лучшей обработки
+//
+// Пример использования:
+//
+//	cfg := config.LoggerConfig{
+//	    Level: "info",
+//	    Format: "json",
+//	    EnableCaller: true,
+//	}
+//	logger, err := setupLogger(cfg)
+//	if err != nil {
+//	    return fmt.Errorf("не удалось создать логгер: %w", err)
+//	}
+//	logger.Info("Приложение запущено", zap.String("version", "1.0.0"))
 func setupLogger(cfg config.LoggerConfig) (*zap.Logger, error) {
 	var zapConfig zap.Config
 
@@ -113,7 +182,45 @@ func setupLogger(cfg config.LoggerConfig) (*zap.Logger, error) {
 	return zapConfig.Build()
 }
 
-// setupRepositories инициализирует репозитории на основе конфигурации
+// setupRepositories инициализирует менеджер репозиториев на основе конфигурации базы данных.
+//
+// Функция создает подходящий менеджер репозиториев в зависимости от типа
+// базы данных, указанного в конфигурации. Поддерживает:
+// - "memory": In-memory хранилище для разработки и тестирования
+// - "postgres": PostgreSQL база данных для продакшена (будущая реализация)
+//
+// Менеджер репозиториев обеспечивает:
+// - Единый интерфейс доступа к данным
+// - Управление соединениями с базой данных
+// - Корректное освобождение ресурсов через метод Close()
+//
+// Параметры:
+//   - cfg: полная конфигурация приложения
+//
+// Возвращает:
+//   - interface{}: менеджер репозиториев с методами GetRepositories() и Close()
+//   - error: ошибка инициализации репозиториев
+//
+// Возможные ошибки:
+//   - "PostgreSQL repository not implemented yet": PostgreSQL пока не реализован
+//   - "unsupported database type: X": неподдерживаемый тип базы данных
+//   - Ошибки подключения к базе данных (для PostgreSQL)
+//
+// Примечания:
+//   - In-memory репозиторий не требует внешних зависимостей
+//   - Все данные в memory репозитории теряются при перезапуске
+//   - PostgreSQL репозиторий требует запущенного сервера базы данных
+//
+// Пример использования:
+//
+//	repoManager, err := setupRepositories(cfg)
+//	if err != nil {
+//	    return fmt.Errorf("не удалось инициализировать репозитории: %w", err)
+//	}
+//	defer repoManager.Close(context.Background())
+//
+//	repos := repoManager.GetRepositories()
+//	post, err := repos.Post.GetByID(ctx, postID)
 func setupRepositories(cfg *config.Config) (interface {
 	GetRepositories() *repository.Repositories
 	Close(context.Context) error
@@ -129,7 +236,46 @@ func setupRepositories(cfg *config.Config) (interface {
 	}
 }
 
-// setupGraphQLServer настраивает GraphQL сервер
+// setupGraphQLServer создает и настраивает GraphQL сервер с полной функциональностью.
+//
+// Функция выполняет комплексную настройку GraphQL сервера включая:
+// - Создание резолверов с внедрением зависимостей сервисов
+// - Настройку исполняемой схемы с типами и мутациями
+// - Добавление транспортов (HTTP, WebSocket для подписок)
+// - Конфигурацию кэширования запросов и схем
+// - Подключение расширений (introspection, APQ)
+//
+// Поддерживаемые транспорты:
+//   - WebSocket: для real-time подписок с keep-alive
+//   - HTTP GET/POST: для стандартных запросов и мутаций
+//   - Multipart: для загрузки файлов (если потребуется)
+//   - OPTIONS: для CORS preflight запросов
+//
+// Функции производительности:
+//   - LRU кэш для скомпилированных запросов (1000 элементов)
+//   - Automatic Persisted Queries для экономии трафика
+//   - Introspection отключается в продакшене для безопасности
+//
+// Параметры:
+//   - cfg: конфигурация сервера с настройками безопасности
+//   - services: инициализированные сервисы бизнес-логики
+//   - logger: логгер для отслеживания операций GraphQL
+//
+// Возвращает:
+//   - *handler.Server: полностью настроенный GraphQL сервер
+//
+// Примечания:
+//   - Сервер поддерживает WebSocket подписки для real-time уведомлений
+//   - Introspection включен только если cfg.Server.EnableIntrospection = true
+//   - Все запросы логируются на уровне debug
+//
+// Пример использования:
+//
+//	srv := setupGraphQLServer(cfg, services, logger)
+//	http.Handle("/graphql", srv)
+//
+//	// Для тестирования подписок:
+//	http.Handle("/ws", srv) // WebSocket endpoint
 func setupGraphQLServer(cfg *config.Config, services *service.Services, logger *zap.Logger) *handler.Server {
 	// Создаем резолвер с внедренными зависимостями
 	resolverImpl := resolver.NewResolver(services, logger.Named("graphql"))
@@ -171,7 +317,47 @@ func setupGraphQLServer(cfg *config.Config, services *service.Services, logger *
 	return srv
 }
 
-// setupHTTPHandlers настраивает HTTP обработчики
+// setupHTTPHandlers создает и настраивает HTTP маршрутизатор с всеми необходимыми endpoints.
+//
+// Функция настраивает полный набор HTTP маршрутов для GraphQL API:
+//
+// Основные endpoints:
+//   - "/query": GraphQL API endpoint для всех запросов, мутаций и подписок
+//   - "/": GraphQL Playground (только в dev режиме) или информация о сервисе
+//   - "/health": Health check endpoint для мониторинга и load balancer'ов
+//   - "/metrics": Базовый metrics endpoint для систем мониторинга
+//
+// Поведение в зависимости от конфигурации:
+//   - Если EnablePlayground = true: "/" показывает GraphQL Playground
+//   - Если EnablePlayground = false: "/" возвращает JSON с информацией о сервисе
+//   - Health check всегда доступен для проверки состояния сервиса
+//
+// Параметры:
+//   - cfg: конфигурация сервера с настройками endpoints
+//   - graphqlServer: настроенный GraphQL сервер для обработки запросов
+//
+// Возвращает:
+//   - http.Handler: маршрутизатор с настроенными endpoints
+//
+// Примеры ответов:
+//
+//	GET /health:
+//	{"status":"ok","service":"habbr-graphql-api","timestamp":"2024-01-15T10:30:45Z"}
+//
+//	GET / (без playground):
+//	{"service":"habbr-graphql-api","status":"running","endpoints":["/query","/health"]}
+//
+//	GET /metrics:
+//	{"service":"habbr-graphql-api","uptime":"unknown"}
+//
+// Пример использования:
+//
+//	handler := setupHTTPHandlers(cfg, graphqlServer)
+//	server := &http.Server{
+//	    Addr:    ":8080",
+//	    Handler: handler,
+//	}
+//	server.ListenAndServe()
 func setupHTTPHandlers(cfg *config.Config, graphqlServer *handler.Server) http.Handler {
 	mux := http.NewServeMux()
 
@@ -205,7 +391,48 @@ func setupHTTPHandlers(cfg *config.Config, graphqlServer *handler.Server) http.H
 	return mux
 }
 
-// waitForShutdown ожидает сигнал завершения и выполняет graceful shutdown
+// waitForShutdown ожидает сигналы завершения и выполняет graceful shutdown HTTP сервера.
+//
+// Функция реализует корректный механизм завершения работы приложения:
+// 1. Настраивает обработку системных сигналов SIGINT (Ctrl+C) и SIGTERM
+// 2. Блокируется в ожидании одного из этих сигналов
+// 3. При получении сигнала начинает graceful shutdown сервера
+// 4. Ожидает завершения активных запросов в рамках таймаута
+// 5. Принудительно останавливает сервер, если таймаут превышен
+//
+// Graceful shutdown означает:
+//   - Сервер прекращает принимать новые соединения
+//   - Активные запросы завершаются в рамках таймаута
+//   - Idle соединения закрываются немедленно
+//   - WebSocket соединения получают уведомление о закрытии
+//
+// Параметры:
+//   - logger: логгер для записи процесса остановки
+//   - server: HTTP сервер для остановки
+//   - timeout: максимальное время ожидания завершения активных запросов
+//
+// Поведение при разных сигналах:
+//   - SIGINT (Ctrl+C): нормальное завершение, graceful shutdown
+//   - SIGTERM: запрос на завершение от системы, graceful shutdown
+//   - Превышение timeout: принудительная остановка с ошибкой
+//
+// Логирование:
+//   - Записывает получение сигнала завершения
+//   - Отслеживает процесс graceful shutdown
+//   - Логирует успешную остановку или принудительное завершение
+//
+// Пример использования:
+//
+//	server := &http.Server{Addr: ":8080", Handler: handler}
+//	go func() {
+//	    if err := server.ListenAndServe(); err != http.ErrServerClosed {
+//	        logger.Fatal("Server failed", zap.Error(err))
+//	    }
+//	}()
+//
+//	// Ожидание graceful shutdown
+//	waitForShutdown(logger, server, 30*time.Second)
+//	logger.Info("Application stopped")
 func waitForShutdown(logger *zap.Logger, server *http.Server, timeout time.Duration) {
 	// Канал для получения сигналов ОС
 	quit := make(chan os.Signal, 1)

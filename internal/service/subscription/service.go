@@ -466,3 +466,24 @@ func (s *Service) Close() {
 		zap.Int64("total_subscriptions_created", s.metrics.SubscriptionsTotal),
 	)
 }
+
+// Subscribe создает новую подписку на события комментариев для указанного поста
+func (s *Service) Subscribe(ctx context.Context, postID uuid.UUID) (<-chan *model.CommentSubscriptionPayload, error) {
+	return s.SubscribeToComments(ctx, postID)
+}
+
+// Publish отправляет событие всем подписчикам указанного поста
+func (s *Service) Publish(postID uuid.UUID, payload *model.CommentSubscriptionPayload) {
+	if err := s.notifySubscribers(postID, payload); err != nil {
+		s.logger.Warn("Failed to publish message to subscribers",
+			zap.Error(err),
+			zap.String("post_id", postID.String()),
+			zap.String("action_type", payload.ActionType),
+		)
+	}
+}
+
+// Shutdown корректно завершает работу сервиса подписок
+func (s *Service) Shutdown() {
+	s.Close()
+}

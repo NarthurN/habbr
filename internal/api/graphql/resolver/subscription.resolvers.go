@@ -24,7 +24,7 @@ func (r *subscriptionResolver) CommentEvents(ctx context.Context, postID string)
 	}
 
 	// Подписываемся на события комментариев через сервис подписок
-	domainCh, err := r.services.Subscription.SubscribeToComments(ctx, parsedPostID)
+	domainCh, err := r.services.Subscription.Subscribe(ctx, parsedPostID)
 	if err != nil {
 		r.logger.Error("Failed to subscribe to comment events", zap.String("postID", postID), zap.Error(err))
 		return nil, err
@@ -143,7 +143,7 @@ func (r *subscriptionResolver) PostStatsUpdates(ctx context.Context, postID stri
 	}
 
 	// Подписываемся на события комментариев для получения статистики
-	domainCh, err := r.services.Subscription.SubscribeToComments(ctx, parsedPostID)
+	domainCh, err := r.services.Subscription.Subscribe(ctx, parsedPostID)
 	if err != nil {
 		r.logger.Error("Failed to subscribe to comment events for stats", zap.String("postID", postID), zap.Error(err))
 		return nil, err

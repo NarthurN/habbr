@@ -21,11 +21,9 @@ type Service struct {
 	subscriptionSvc SubscriptionNotifier
 }
 
-// SubscriptionNotifier интерфейс для уведомлений о комментариях
+// SubscriptionNotifier определяет интерфейс для отправки уведомлений о событиях комментариев
 type SubscriptionNotifier interface {
-	NotifyCommentCreated(ctx context.Context, comment *model.Comment) error
-	NotifyCommentUpdated(ctx context.Context, comment *model.Comment) error
-	NotifyCommentDeleted(ctx context.Context, postID uuid.UUID, commentID uuid.UUID) error
+	Publish(postID uuid.UUID, payload *model.CommentSubscriptionPayload)
 }
 
 // NewService создает новый сервис комментариев
@@ -151,13 +149,11 @@ func (s *Service) CreateComment(ctx context.Context, input model.CommentInput) (
 
 	// Отправляем уведомление о новом комментарии
 	if s.subscriptionSvc != nil {
-		if err := s.subscriptionSvc.NotifyCommentCreated(ctx, comment); err != nil {
-			s.logger.Warn("Failed to send comment creation notification",
-				zap.Error(err),
-				zap.String("comment_id", comment.ID.String()),
-			)
-			// Не прерываем выполнение, уведомления не критичны
-		}
+		s.subscriptionSvc.Publish(comment.PostID, &model.CommentSubscriptionPayload{
+			PostID:     comment.PostID,
+			Comment:    comment,
+			ActionType: "CREATED",
+		})
 	}
 
 	return comment, nil
@@ -370,12 +366,11 @@ func (s *Service) UpdateComment(ctx context.Context, id uuid.UUID, input model.C
 
 	// Отправляем уведомление об обновлении комментария
 	if s.subscriptionSvc != nil {
-		if err := s.subscriptionSvc.NotifyCommentUpdated(ctx, existingComment); err != nil {
-			s.logger.Warn("Failed to send comment update notification",
-				zap.Error(err),
-				zap.String("comment_id", existingComment.ID.String()),
-			)
-		}
+		s.subscriptionSvc.Publish(existingComment.PostID, &model.CommentSubscriptionPayload{
+			PostID:     existingComment.PostID,
+			Comment:    existingComment,
+			ActionType: "UPDATED",
+		})
 	}
 
 	return existingComment, nil
@@ -462,12 +457,11 @@ func (s *Service) DeleteComment(ctx context.Context, id uuid.UUID, authorID uuid
 
 	// Отправляем уведомление об удалении комментария
 	if s.subscriptionSvc != nil {
-		if err := s.subscriptionSvc.NotifyCommentDeleted(ctx, comment.PostID, id); err != nil {
-			s.logger.Warn("Failed to send comment deletion notification",
-				zap.Error(err),
-				zap.String("comment_id", id.String()),
-			)
-		}
+		s.subscriptionSvc.Publish(comment.PostID, &model.CommentSubscriptionPayload{
+			PostID:     comment.PostID,
+			Comment:    comment,
+			ActionType: "DELETED",
+		})
 	}
 
 	return nil
@@ -617,4 +611,48 @@ func (s *Service) buildCommentConnection(comments []*model.Comment, pagination m
 		Edges:    edges,
 		PageInfo: pageInfo,
 	}
+}
+
+// GetCommentStats возвращает общее количество комментариев к посту
+func (s *Service) GetCommentStats(ctx context.Context, postID uuid.UUID) (int, error) {
+	if postID == uuid.Nil {
+		s.logger.Warn("Attempt to get comment stats with nil post ID")
+		return 0, model.NewValidationError("post_id", "post ID is required")
+	}
+
+	s.logger.Debug("Getting comment stats", zap.String("post_id", postID.String()))
+
+	// Проверка существования поста
+	exists, err := s.postRepo.Exists(ctx, postID)
+	if err != nil {
+		s.logger.Error("Failed to check post existence for comment stats",
+			zap.Error(err),
+			zap.String("post_id", postID.String()),
+		)
+		return 0, model.NewInternalError(fmt.Sprintf("failed to check post existence: %v", err))
+	}
+
+	if !exists {
+		s.logger.Debug("Post not found for comment stats",
+			zap.String("post_id", postID.String()),
+		)
+		return 0, model.NewNotFoundError("post", postID)
+	}
+
+	// Подсчет комментариев к посту
+	count, err := s.commentRepo.CountByPostID(ctx, postID)
+	if err != nil {
+		s.logger.Error("Failed to count comments by post ID",
+			zap.Error(err),
+			zap.String("post_id", postID.String()),
+		)
+		return 0, model.NewInternalError(fmt.Sprintf("failed to count comments: %v", err))
+	}
+
+	s.logger.Debug("Comment stats retrieved successfully",
+		zap.String("post_id", postID.String()),
+		zap.Int("comment_count", count),
+	)
+
+	return count, nil
 }
