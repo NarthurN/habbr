@@ -1,0 +1,12 @@
+# GraphQL Schema для Habbr API
+# Поддерживает посты, комментарии и real-time subscriptions
+
+directive @auth(role: String) on FIELD_DEFINITION
+directive @rateLimit(max: Int!, window: String!) on FIELD_DEFINITION
+directive @deprecated(reason: String) on FIELD_DEFINITION | ENUM_VALUE
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

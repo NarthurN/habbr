@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: habbr-postgres
+    environment:
+      POSTGRES_DB: habbr
+      POSTGRES_USER: habbr
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - habbr-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U habbr -d habbr"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: habbr-app
+    environment:
+      # Server config
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: 8080
+      SERVER_ENABLE_PLAYGROUND: "true"
+      SERVER_ENABLE_INTROSPECTION: "true"
+
+      # Database config
+      DATABASE_TYPE: "postgres"
+      DATABASE_HOST: "postgres"
+      DATABASE_PORT: 5432
+      DATABASE_NAME: "habbr"
+      DATABASE_USER: "habbr"
+      DATABASE_PASSWORD: "password"
+      DATABASE_SSL_MODE: "disable"
+
+      # Logger config
+      LOGGER_LEVEL: "info"
+      LOGGER_FORMAT: "json"
+      LOGGER_ENABLE_CALLER: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - habbr-network
+    restart: unless-stopped
+
+  # Application with in-memory database (for development)
+  app-memory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: habbr-app-memory
+    environment:
+      # Server config
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: 8080
+      SERVER_ENABLE_PLAYGROUND: "true"
+      SERVER_ENABLE_INTROSPECTION: "true"
+
+      # Database config
+      DATABASE_TYPE: "memory"
+
+      # Logger config
+      LOGGER_LEVEL: "debug"
+      LOGGER_FORMAT: "console"
+      LOGGER_ENABLE_CALLER: "true"
+    ports:
+      - "8081:8080"
+    networks:
+      - habbr-network
+    restart: unless-stopped
+    profiles:
+      - memory
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  habbr-network:
+    driver: bridge

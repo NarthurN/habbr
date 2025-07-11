@@ -1,0 +1,138 @@
+scalar Time
+
+# Основные типы
+type Post {
+  id: ID!
+  title: String!
+  content: String!
+  authorID: String!
+  commentsEnabled: Boolean!
+  createdAt: Time!
+  updatedAt: Time!
+  comments(
+    first: Int
+    after: String
+    last: Int
+    before: String
+    filter: CommentFilter
+  ): CommentConnection!
+}
+
+type Comment {
+  id: ID!
+  postID: ID!
+  parentID: ID
+  content: String!
+  authorID: String!
+  depth: Int!
+  createdAt: Time!
+  updatedAt: Time!
+  children(
+    first: Int
+    after: String
+    last: Int
+    before: String
+  ): CommentConnection!
+}
+
+# Пагинация
+type PostConnection {
+  edges: [PostEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PostEdge {
+  node: Post!
+  cursor: String!
+}
+
+type CommentConnection {
+  edges: [CommentEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type CommentEdge {
+  node: Comment!
+  cursor: String!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+# Входные типы
+input PostInput {
+  title: String!
+  content: String!
+  authorID: String!
+  commentsEnabled: Boolean! = true
+}
+
+input PostUpdateInput {
+  title: String
+  content: String
+  commentsEnabled: Boolean
+}
+
+input CommentInput {
+  postID: ID!
+  parentID: ID
+  content: String!
+  authorID: String!
+}
+
+input CommentUpdateInput {
+  content: String
+}
+
+# Фильтры
+input PostFilter {
+  authorID: String
+  title: String
+  content: String
+  commentsEnabled: Boolean
+}
+
+input CommentFilter {
+  authorID: String
+  content: String
+  depth: Int
+  maxDepth: Int
+}
+
+# Результаты операций
+type PostResult {
+  success: Boolean!
+  post: Post
+  error: String
+}
+
+type CommentResult {
+  success: Boolean!
+  comment: Comment
+  error: String
+}
+
+type DeleteResult {
+  success: Boolean!
+  deletedID: ID
+  error: String
+}
+
+# События для подписок
+type CommentEvent {
+  type: CommentEventType!
+  comment: Comment!
+  postID: ID!
+}
+
+enum CommentEventType {
+  CREATED
+  UPDATED
+  DELETED
+}

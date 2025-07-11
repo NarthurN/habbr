@@ -1,0 +1,35 @@
+# gqlgen configuration for Habbr API
+# Updated to support new schema structure and subscriptions
+
+# Схемы GraphQL
+schema:
+  - internal/api/graphql/schema/*.graphql
+
+# Генерация
+exec:
+  filename: internal/api/graphql/generated/generated.go
+  package: generated
+
+model:
+  filename: internal/api/graphql/generated/models_gen.go
+  package: generated
+
+resolver:
+  layout: follow-schema
+  dir: internal/api/graphql/resolver
+  package: resolver
+  filename_template: "{name}.resolvers.go"
+
+# Настройка скалярных типов
+models:
+  Time:
+    model:
+      - github.com/99designs/gqlgen/graphql.Time
+
+# Настройки
+skip_validation: false
+skip_mod_tidy: false
+omit_slice_element_pointers: false
+omit_interface_checks: false
+omit_complexity: false
+struct_tag: json

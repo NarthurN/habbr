@@ -1,0 +1,16 @@
+type Subscription {
+  # Подписка на события комментариев для конкретного поста
+  commentEvents(postID: ID!): CommentEvent!
+
+  # Подписка на все события комментариев (для админов)
+  allCommentEvents: CommentEvent!
+
+  # Подписка на события создания новых постов
+  newPosts: Post!
+
+  # Подписка на изменения конкретного поста
+  postUpdates(postID: ID!): Post!
+
+  # Подписка на статистику поста в реальном времени
+  postStatsUpdates(postID: ID!): PostStats!
+}

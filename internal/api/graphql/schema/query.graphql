@@ -1,0 +1,62 @@
+type Query {
+  # Посты
+  posts(
+    first: Int
+    after: String
+    last: Int
+    before: String
+    filter: PostFilter
+  ): PostConnection!
+
+  post(id: ID!): Post
+
+  # Комментарии
+  comments(
+    postID: ID!
+    first: Int
+    after: String
+    last: Int
+    before: String
+    filter: CommentFilter
+  ): CommentConnection!
+
+  comment(id: ID!): Comment
+
+  # Иерархические комментарии
+  commentTree(
+    postID: ID!
+    maxDepth: Int
+    filter: CommentFilter
+  ): [Comment!]!
+
+  # Статистика
+  postStats(id: ID!): PostStats
+  commentStats(postID: ID!): CommentStats
+
+  # Поиск
+  searchPosts(
+    query: String!
+    first: Int
+    after: String
+  ): PostConnection!
+
+  searchComments(
+    postID: ID!
+    query: String!
+    first: Int
+    after: String
+  ): CommentConnection!
+}
+
+# Статистика
+type PostStats {
+  totalComments: Int!
+  commentsEnabled: Boolean!
+  lastCommentAt: Time
+}
+
+type CommentStats {
+  totalComments: Int!
+  maxDepth: Int!
+  averageDepth: Float!
+}

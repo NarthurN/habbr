@@ -1,0 +1,27 @@
+type Mutation {
+  # Операции с постами
+  createPost(input: PostInput!): PostResult!
+  updatePost(id: ID!, input: PostUpdateInput!): PostResult!
+  deletePost(id: ID!): DeleteResult!
+
+  # Управление комментариями в посте
+  enableComments(postID: ID!): PostResult!
+  disableComments(postID: ID!): PostResult!
+
+  # Операции с комментариями
+  createComment(input: CommentInput!): CommentResult!
+  updateComment(id: ID!, input: CommentUpdateInput!): CommentResult!
+  deleteComment(id: ID!): DeleteResult!
+
+  # Массовые операции
+  deleteCommentsBatch(postID: ID!, commentIDs: [ID!]!): BatchDeleteResult!
+  deleteCommentsTree(commentID: ID!): BatchDeleteResult!
+}
+
+# Результат массового удаления
+type BatchDeleteResult {
+  success: Boolean!
+  deletedCount: Int!
+  deletedIDs: [ID!]!
+  errors: [String!]!
+}
