@@ -47,24 +47,43 @@ format: ## Format code
 	goimports -w .
 
 # Docker
-docker-build: ## Build Docker image
-	docker build -t $(DOCKER_IMAGE) .
+docker-build: ## Build Docker image (production)
+	docker build -t $(DOCKER_IMAGE) --target production .
+
+docker-build-dev: ## Build Docker image (development)
+	docker build -t habbr/$(APP_NAME):dev --target development .
 
 docker-run: ## Run Docker container
 	docker run -p 8080:8080 -e DATABASE_TYPE=memory $(DOCKER_IMAGE)
 
 docker-compose-up: ## Start with docker-compose
-	docker-compose up --build
+	docker compose up --build
 
 docker-compose-down: ## Stop docker-compose
-	docker-compose down
+	docker compose down -v
+
+docker-dev: ## Start development environment
+	./scripts/docker-dev.sh
+
+docker-dev-tools: ## Start development environment with tools
+	./scripts/docker-dev.sh --with-tools
+
+docker-prod: ## Start production environment
+	./scripts/docker-prod.sh
+
+docker-prod-logs: ## Start production environment with logs
+	./scripts/docker-prod.sh --logs
+
+docker-clean: ## Clean Docker resources
+	docker compose down -v --remove-orphans
+	docker system prune -f
 
 # Database
 db-up: ## Start PostgreSQL with docker-compose
-	docker-compose up -d postgres
+	docker compose up -d postgres
 
 db-down: ## Stop PostgreSQL
-	docker-compose down postgres
+	docker compose down postgres
 
 # Cleanup
 clean: ## Clean build artifacts

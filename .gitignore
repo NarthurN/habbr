@@ -76,3 +76,6 @@ temp/
 config.yaml
 config.yml
 config.json
+
+# Air hot reload
+build-errors.log
